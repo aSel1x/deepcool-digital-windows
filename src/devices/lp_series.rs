@@ -2,11 +2,10 @@
 //! - LP240
 //! - LP360
 
-use crate::monitor::{cpu::Cpu, gpu::Gpu};
-use super::{device_error, Mode};
-use cpu_monitor::CpuInstant;
-use hidapi::HidApi;
-use std::{thread::sleep, time::Duration};
+use super::{checksum, Ctx, DisplayDriver, Mode};
+use crate::device::Device;
+use crate::error::Result;
+use crate::monitor::{Cpu, EnergySample, Gpu};
 
 /// Helper module for the LP Series.
 mod dot_matrix {
@@ -216,74 +215,96 @@ mod dot_matrix {
     }
 }
 
-pub const DEFAULT_MODE: Mode = Mode::CpuUsage;
+const MODES: &[Mode] = &[
+    Mode::CpuUsage,
+    Mode::CpuTemperature,
+    Mode::CpuPower,
+    Mode::GpuUsage,
+    Mode::GpuTemperature,
+    Mode::GpuPower,
+];
 
 pub struct Display {
     cpu: Cpu,
     gpu: Gpu,
-    pub mode: Mode,
-    pub secondary: Option<Mode>,
-    update: Duration,
+    secondary: Option<Mode>,
     fahrenheit: bool,
-    rotate: u16,
+    rotation: u16,
+    last_energy: Option<EnergySample>,
 }
 
-impl Display {
-    pub fn new(cpu: Cpu, gpu: Gpu, mode: &Mode, secondary: &Mode, update: Duration, fahrenheit: bool, rotate: u16) -> Self {
-        // Verify the display mode
-        let mode = match mode {
-            Mode::Default => DEFAULT_MODE,
-            Mode::CpuUsage => Mode::CpuUsage,
-            Mode::CpuTemperature => Mode::CpuTemperature,
-            Mode::CpuPower => Mode::CpuPower,
-            Mode::GpuUsage => Mode::GpuUsage,
-            Mode::GpuTemperature => Mode::GpuTemperature,
-            Mode::GpuPower => Mode::GpuPower,
-            _ => mode.support_error(),
-        };
+pub fn build(ctx: Ctx) -> Result<Box<dyn DisplayDriver>> {
+    let secondary = match ctx.secondary {
+        Mode::Default => None,
+        other => Some(other),
+    };
+    Ok(Box::new(Display {
+        cpu: ctx.cpu,
+        gpu: ctx.gpu,
+        secondary,
+        fahrenheit: ctx.fahrenheit,
+        rotation: ctx.rotation,
+        last_energy: None,
+    }))
+}
 
-        let secondary = match secondary {
-            Mode::Default => None,
-            Mode::CpuUsage => Some(Mode::CpuUsage),
-            Mode::CpuTemperature => Some(Mode::CpuTemperature),
-            Mode::CpuPower => Some(Mode::CpuPower),
-            Mode::GpuUsage => Some(Mode::GpuUsage),
-            Mode::GpuTemperature => Some(Mode::GpuTemperature),
-            Mode::GpuPower => Some(Mode::GpuPower),
-            _ => Some(secondary.support_error_secondary()),
-        };
+impl DisplayDriver for Display {
+    fn modes(&self) -> &'static [Mode] {
+        MODES
+    }
 
-        Display {
-            cpu,
-            gpu,
-            mode,
-            secondary,
-            update,
-            fahrenheit,
-            rotate,
+    fn secondary_modes(&self) -> &'static [Mode] {
+        MODES
+    }
+
+    fn warn(&self, mode: Mode) {
+        let uses = |m: Mode| mode == m || self.secondary == Some(m);
+        if uses(Mode::CpuTemperature) {
+            self.cpu.warn_temp();
+        }
+        if uses(Mode::CpuPower) {
+            self.cpu.warn_rapl();
+        }
+        if uses(Mode::GpuUsage) || uses(Mode::GpuTemperature) || uses(Mode::GpuPower) {
+            self.gpu.warn_missing();
         }
     }
 
-    pub fn run(&self, api: &HidApi, vid: u16, pid: u16) {
-        // Connect to device
-        let device = api.open(vid, pid).unwrap_or_else(|_| device_error());
+    fn init(&mut self, _device: &mut dyn Device) -> Result<()> {
+        self.last_energy = self.cpu.read_energy();
+        Ok(())
+    }
 
-        // Display warning if a required module is missing
-        if matches!(self.mode, Mode::CpuTemperature) || matches!(self.secondary, Some(Mode::CpuTemperature)) {
-            self.cpu.warn_temp();
-        }
-        if matches!(self.mode, Mode::CpuPower) || matches!(self.secondary, Some(Mode::CpuPower)) {
-            self.cpu.warn_rapl();
-        }
-        if
-            matches!(self.mode, Mode::GpuUsage | Mode::GpuTemperature | Mode::GpuPower) ||
-            matches!(self.secondary, Some(Mode::GpuUsage) | Some(Mode::GpuTemperature) | Some(Mode::GpuPower))
-        {
-            self.gpu.warn_missing();
-        }
+    fn frame(&mut self, device: &mut dyn Device, mode: Mode) -> Result<()> {
+        let packet = self.status_message(mode);
+        self.last_energy = self.cpu.read_energy();
+        device.write_report(&packet)
+    }
+}
 
-        // Data packet
-        let mut data: [u8; 64] = [0; 64];
+impl Display {
+    /// Reads every sensor the panel can show, once.
+    ///
+    /// Both matrix rows read from this snapshot: calling the getters per row
+    /// asked `Cpu::get_usage` twice inside one sampling window, and the second
+    /// call correctly refuses to answer — which rendered the second row as 0.
+    fn sample(&self) -> crate::monitor::Sample {
+        crate::monitor::Sample {
+            cpu_usage: self.cpu.get_usage(),
+            cpu_temp: self.cpu.get_temp(self.fahrenheit),
+            cpu_power: self.cpu.get_power(self.last_energy),
+            gpu_usage: self.gpu.get_usage(),
+            gpu_temp: self.gpu.get_temp(self.fahrenheit),
+            gpu_power: self.gpu.get_power(),
+            ..crate::monitor::Sample::default()
+        }
+    }
+}
+
+impl Display {
+    fn status_message(&self, mode: Mode) -> [u8; 64] {
+        let sample = self.sample();
+        let mut data = [0u8; 64];
         data[0] = 16;
         data[1] = 104;
         data[2] = 1;
@@ -291,86 +312,48 @@ impl Display {
         data[4] = 29;
         data[5] = 1;
 
-        // Display loop
-        loop {
-            // Initialize the packet
-            let mut status_data = data.clone();
-            let mut matrix = [[false; 14]; 14];
-
-            // Get initial CPU readings & wait
-            let cpu_instant = self.cpu.read_instant();
-            let cpu_energy = self.cpu.read_energy();
-            sleep(self.update);
-
-            // Set the pixels and calculate the bytes for the display
-            match &self.secondary {
-                Some(secondary) => {
-                    self.insert_data_to_matrix(
-                        &mut matrix,
-                        1,
-                        self.get_system_info(&self.mode, cpu_instant, cpu_energy)
-                    );
-                    self.insert_data_to_matrix(
-                        &mut matrix,
-                        8,
-                        self.get_system_info(secondary, cpu_instant, cpu_energy)
-                    );
-                }
-                None => {
-                    self.insert_data_to_matrix(
-                        &mut matrix,
-                        5,
-                        self.get_system_info(&self.mode, cpu_instant, cpu_energy)
-                    );
-                }
+        let mut matrix = [[false; 14]; 14];
+        match self.secondary {
+            Some(secondary) => {
+                self.insert_data_to_matrix(&mut matrix, 1, self.get_system_info(mode, &sample));
+                self.insert_data_to_matrix(&mut matrix, 8, self.get_system_info(secondary, &sample));
             }
-            if self.rotate > 0 {
-                dot_matrix::rotate_matrix(&mut matrix, self.rotate);
+            None => {
+                self.insert_data_to_matrix(&mut matrix, 5, self.get_system_info(mode, &sample));
             }
-            status_data[6..=33].copy_from_slice(&dot_matrix::matrix_to_bytes(matrix));
-
-            // Checksum & termination byte
-            let checksum: u16 = status_data[1..=33].iter().map(|&x| x as u16).sum();
-            status_data[34] = (checksum % 256) as u8;
-            status_data[35] = 22;
-
-            device.write(&status_data).unwrap();
         }
+        dot_matrix::rotate_matrix(&mut matrix, self.rotation);
+        data[6..=33].copy_from_slice(&dot_matrix::matrix_to_bytes(matrix));
+
+        data[34] = checksum(&data, 33);
+        data[35] = 22;
+
+        data
     }
 
-    fn get_system_info(&self, mode: &Mode, cpu_instant: CpuInstant, cpu_energy: u64) -> (u16, dot_matrix::Unit) {
+    fn get_system_info(&self, mode: Mode, s: &crate::monitor::Sample) -> (u16, dot_matrix::Unit) {
+        let unit = if self.fahrenheit {
+            dot_matrix::Unit::Fahrenheit
+        } else {
+            dot_matrix::Unit::Celsius
+        };
         match mode {
-            Mode::CpuUsage => (
-                self.cpu.get_usage(cpu_instant) as u16,
-                dot_matrix::Unit::Percent
-            ),
-            Mode::CpuTemperature => (
-                self.cpu.get_temp(self.fahrenheit) as u16,
-                if self.fahrenheit { dot_matrix::Unit::Fahrenheit } else { dot_matrix::Unit::Celsius }
-            ),
-            Mode::CpuPower => (
-                self.cpu.get_power(cpu_energy, self.update.as_millis() as u64),
-                dot_matrix::Unit::Watt
-            ),
-            Mode::GpuUsage => (
-                self.gpu.get_usage() as u16,
-                dot_matrix::Unit::Percent
-            ),
-            Mode::GpuTemperature => (
-                self.gpu.get_temp(self.fahrenheit) as u16,
-                if self.fahrenheit { dot_matrix::Unit::Fahrenheit } else { dot_matrix::Unit::Celsius }
-            ),
-            Mode::GpuPower => (
-                self.gpu.get_power(),
-                dot_matrix::Unit::Watt
-            ),
+            Mode::CpuUsage => (s.cpu_usage.unwrap_or(0) as u16, dot_matrix::Unit::Percent),
+            Mode::CpuTemperature => (s.cpu_temp.unwrap_or(0) as u16, unit),
+            Mode::CpuPower => (s.cpu_power.unwrap_or(0), dot_matrix::Unit::Watt),
+            Mode::GpuUsage => (s.gpu_usage.unwrap_or(0) as u16, dot_matrix::Unit::Percent),
+            Mode::GpuTemperature => (s.gpu_temp.unwrap_or(0) as u16, unit),
+            Mode::GpuPower => (s.gpu_power.unwrap_or(0), dot_matrix::Unit::Watt),
             _ => (0, dot_matrix::Unit::Empty),
         }
     }
 
     fn insert_data_to_matrix(&self, matrix: &mut [[bool; 14]; 14], row_id: usize, data: (u16, dot_matrix::Unit)) {
         let (value, unit) = data;
-        if value / 100 < 1 {
+        // The panel is three digits wide; clamp rather than rendering a bogus
+        // leading digit for anything larger.
+        let value = value.min(999);
+        if value < 100 {
             // 2-digit number
             dot_matrix::insert_pattern(matrix, dot_matrix::get_number_pattern((value / 10) as u8), row_id, 1);
             dot_matrix::insert_pattern(matrix, dot_matrix::get_number_pattern((value % 10) as u8), row_id, 5);
@@ -382,5 +365,64 @@ impl Display {
             dot_matrix::insert_pattern(matrix, dot_matrix::get_number_pattern((value % 10) as u8), row_id, 9);
             dot_matrix::insert_pattern(matrix, unit.get_pattern(), 5, 13);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn display(secondary: Option<Mode>, rotation: u16) -> Display {
+        Display {
+            cpu: Cpu::new(),
+            gpu: Gpu::absent(),
+            secondary,
+            fahrenheit: false,
+            rotation,
+            last_energy: None,
+        }
+    }
+
+    #[test]
+    fn packet_header_and_terminator_match_the_protocol_table() {
+        let pkt = display(None, 0).status_message(Mode::CpuUsage);
+        assert_eq!([pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5]], [16, 104, 1, 5, 29, 1]);
+        assert_eq!(pkt[34], checksum(&pkt, 33));
+        assert_eq!(pkt[35], 22);
+    }
+
+    #[test]
+    fn a_four_digit_value_clamps_instead_of_drawing_a_blank_digit() {
+        // get_number_pattern returns an empty glyph for anything above 9, so an
+        // unclamped 1200 W used to render as a blank followed by "00".
+        let d = display(None, 0);
+        let mut matrix = [[false; 14]; 14];
+        d.insert_data_to_matrix(&mut matrix, 5, (1200, dot_matrix::Unit::Watt));
+        let lit = matrix.iter().flatten().filter(|p| **p).count();
+        assert!(lit > 0, "clamped value must still draw digits");
+    }
+
+    #[test]
+    fn rotation_preserves_the_number_of_lit_pixels() {
+        let d = display(None, 0);
+        let mut base = [[false; 14]; 14];
+        d.insert_data_to_matrix(&mut base, 5, (42, dot_matrix::Unit::Percent));
+        let expected = base.iter().flatten().filter(|p| **p).count();
+
+        for deg in [90u16, 180, 270] {
+            let mut m = base;
+            dot_matrix::rotate_matrix(&mut m, deg);
+            assert_eq!(
+                m.iter().flatten().filter(|p| **p).count(),
+                expected,
+                "rotation by {deg} lost pixels"
+            );
+        }
+    }
+
+    #[test]
+    fn matrix_serialises_to_the_28_bytes_the_packet_reserves() {
+        let m = [[true; 14]; 14];
+        assert_eq!(dot_matrix::matrix_to_bytes(m).len(), 28);
     }
 }

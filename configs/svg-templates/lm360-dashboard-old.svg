@@ -1,0 +1,45 @@
+<svg width="320" height="240" viewBox="0 0 320 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_54_45)">
+<path d="M320 0H0V240H320V0Z" fill="black"/>
+<path d="M48 63.2V68M48 20V24.8M60 63.2V68M60 20V24.8M24 44H28.8M24 56H28.8M24 32H28.8M67.2 44H72M67.2 56H72M67.2 32H72M36 63.2V68M36 20V24.8M33.6 24.8H62.4C65.051 24.8 67.2 26.949 67.2 29.6V58.4C67.2 61.051 65.051 63.2 62.4 63.2H33.6C30.949 63.2 28.8 61.051 28.8 58.4V29.6C28.8 26.949 30.949 24.8 33.6 24.8ZM40.8 34.4H55.2C56.5255 34.4 57.6 35.4745 57.6 36.8V51.2C57.6 52.5255 56.5255 53.6 55.2 53.6H40.8C39.4745 53.6 38.4 52.5255 38.4 51.2V36.8C38.4 35.4745 39.4745 34.4 40.8 34.4Z" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M85.75 31.1993V48.0599C86.9892 48.7642 87.9576 49.8513 88.5052 51.1526C89.0528 52.454 89.1489 53.8968 88.7785 55.2574C88.4082 56.618 87.5921 57.8202 86.4569 58.6777C85.3218 59.5352 83.9309 60 82.5 60C81.0691 60 79.6782 59.5352 78.5431 58.6777C77.4079 57.8202 76.5918 56.618 76.2215 55.2574C75.8511 53.8968 75.9472 52.454 76.4948 51.1526C77.0424 49.8513 78.0108 48.7642 79.25 48.0599V31.1993C79.25 30.3508 79.5924 29.5371 80.2019 28.9371C80.8114 28.3371 81.638 28 82.5 28C83.362 28 84.1886 28.3371 84.7981 28.9371C85.4076 29.5371 85.75 30.3508 85.75 31.1993Z" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Saira Condensed" font-size="81" letter-spacing="-0.0172em"><tspan x="93" y="72.188">{{ cpu_temp }}</tspan></text>
+<path d="M214 92L0 92" stroke="white"/>
+<path d="M24 151.944H67.2C68.473 151.944 69.6939 151.441 70.5941 150.545C71.4943 149.649 72 148.434 72 147.167V128.056C72 126.788 71.4943 125.573 70.5941 124.677C69.6939 123.781 68.473 123.278 67.2 123.278H24M24 161.5V118.5M36 151.944V159.111C36 159.745 36.2529 160.352 36.7029 160.8C37.153 161.248 37.7635 161.5 38.4 161.5H50.4C51.0365 161.5 51.647 161.248 52.0971 160.8C52.5471 160.352 52.8 159.745 52.8 159.111V151.944M62.4 137.611C62.4 140.25 60.251 142.389 57.6 142.389C54.949 142.389 52.8 140.25 52.8 137.611C52.8 134.972 54.949 132.833 57.6 132.833C60.251 132.833 62.4 134.972 62.4 137.611ZM43.2 137.611C43.2 140.25 41.051 142.389 38.4 142.389C35.749 142.389 33.6 140.25 33.6 137.611C33.6 134.972 35.749 132.833 38.4 132.833C41.051 132.833 43.2 134.972 43.2 137.611Z" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M85.75 127.199V144.06C86.9892 144.764 87.9576 145.851 88.5052 147.153C89.0528 148.454 89.1489 149.897 88.7785 151.257C88.4082 152.618 87.5921 153.82 86.4569 154.678C85.3218 155.535 83.9309 156 82.5 156C81.0691 156 79.6782 155.535 78.5431 154.678C77.4079 153.82 76.5918 152.618 76.2215 151.257C75.8511 149.897 75.9472 148.454 76.4948 147.153C77.0424 145.851 78.0108 144.764 79.25 144.06V127.199C79.25 126.351 79.5924 125.537 80.2019 124.937C80.8114 124.337 81.638 124 82.5 124C83.362 124 84.1886 124.337 84.7981 124.937C85.4076 125.537 85.75 126.351 85.75 127.199Z" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Saira Condensed" font-size="81" letter-spacing="-0.0172em"><tspan x="93" y="168.188">{{ gpu_temp }}</tspan></text>
+<path d="M222 0V84" stroke="white"/>
+<path d="M214 88H218L221.2 91.2H222.8L226 88H230L226.8 91.2H226L226.8 92V93.6H225.2L223.2 91.6L222.8 92V95.2L222 96L221.2 95.2V92L220.8 91.6L218.8 93.6H217.2V92L218 91.2H217.2L214 88Z" fill="white"/>
+<path d="M220.4 89.6L221.2 90.4H222.8L223.6 89.6L222.8 88.8L222 88L221.2 88.8L220.4 89.6Z" fill="white"/>
+<path d="M221.2 91.2L218 88H214L217.2 91.2H218M221.2 91.2L218.8 93.6H217.2V92L218 91.2M221.2 91.2H220.4M221.2 91.2H222.8M218 91.2H220.4M220.4 88L221.2 88.8M221.2 88.8L220.4 89.6L221.2 90.4H222.8L223.6 89.6L222.8 88.8M221.2 88.8L222 88L222.8 88.8M223.6 88L222.8 88.8M222.8 91.2L226 88H230L226.8 91.2H226M222.8 91.2L225.2 93.6H226.8V92L226 91.2M222.8 91.2H223.6M226 91.2H223.6M220.4 91.2L221.2 92V95.2L222 96L222.8 95.2V92L223.6 91.2" stroke="white" stroke-width="0.1"/>
+<path d="M222 100V184" stroke="white"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Saira" font-size="16" letter-spacing="-0.004em"><tspan x="236.695" y="27.568">V</tspan></text>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Saira" font-size="16" letter-spacing="-0.004em"><tspan x="254" y="27.568">{{ vcore }}</tspan></text>
+<path d="M242 46V46.008M241.061 49.5039C240.223 49.9275 239.28 50.0995 238.346 49.999C237.412 49.8985 236.527 49.5298 235.798 48.9374C235.069 48.3451 234.527 47.5543 234.237 46.6607C233.947 45.767 233.923 44.8086 234.166 43.9012L238.496 45.0614C238.072 44.223 237.9 43.2798 238.001 42.3458C238.101 41.4118 238.47 40.5269 239.063 39.7978C239.655 39.0687 240.446 38.5266 241.339 38.237C242.233 37.9474 243.191 37.9227 244.099 38.1657L242.939 42.4961C243.777 42.0724 244.72 41.9005 245.654 42.001C246.588 42.1015 247.473 42.4702 248.202 43.0626C248.931 43.6549 249.473 44.4457 249.763 45.3393C250.053 46.233 250.077 47.1914 249.834 48.0988L245.504 46.9386C245.928 47.777 246.1 48.7202 245.999 49.6542C245.899 50.5882 245.53 51.4731 244.937 52.2022C244.345 52.9313 243.554 53.4734 242.661 53.763C241.767 54.0526 240.809 54.0773 239.901 53.8343L241.061 49.5039Z" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Saira" font-size="16" letter-spacing="-0.004em"><tspan x="254" y="51.568">{{ liquid_fan_rpm }}</tspan></text>
+<path d="M242 62V65.2M245.36 66.64L247.68 64.32M246.8 70H250M245.36 73.36L247.68 75.68M242 74.8V78M236.32 75.68L238.64 73.36M234 70H237.2M236.32 64.32L238.64 66.64" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Saira" font-size="16" letter-spacing="-0.004em"><tspan x="254" y="75.568">{{ cpu_usage }}</tspan></text>
+<path d="M310 92L230 92" stroke="white"/>
+<path d="M246 126V124.5M246 130.5V129M249.2 126V124.5M249.2 130.5V129M238 125.25H239.2M252.4 130.5V129M252.4 129C253.284 129 254 128.328 254 127.5V123C254 122.172 253.284 121.5 252.4 121.5H239.6C238.716 121.5 238 122.172 238 123V127.5C238 128.328 238.716 129 239.6 129M252.4 129H239.6M252.8 125.25H254M239.6 130.5V129M242.8 126V124.5M242.8 130.5V129" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Saira" font-size="16" letter-spacing="-0.004em"><tspan x="262" y="131.568">{{ vram_usage }}</tspan></text>
+<path d="M246 142V145.2M249.36 146.64L251.68 144.32M250.8 150H254M249.36 153.36L251.68 155.68M246 154.8V158M240.32 155.68L242.64 153.36M238 150H241.2M240.32 144.32L242.64 146.64" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Saira" font-size="16" letter-spacing="-0.004em"><tspan x="262" y="155.568">{{ gpu_usage }}</tspan></text>
+<path d="M40 204V200.833M40 213.5V210.333M46.4 204V200.833M46.4 213.5V210.333M24 202.417H26.4M52.8 213.5V210.333M52.8 210.333C54.5673 210.333 56 208.916 56 207.167V197.667C56 195.918 54.5673 194.5 52.8 194.5H27.2C25.4327 194.5 24 195.918 24 197.667V207.167C24 208.916 25.4327 210.333 27.2 210.333M52.8 210.333H27.2M53.6 202.417H56M27.2 213.5V210.333M33.6 204V200.833M33.6 213.5V210.333" stroke="white" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="65" y="193" width="22" height="22" fill="{% if 0 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="89" y="193" width="22" height="22" fill="{% if 1 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="113" y="193" width="22" height="22" fill="{% if 2 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="137" y="193" width="22" height="22" fill="{% if 3 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="161" y="193" width="22" height="22" fill="{% if 4 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="185" y="193" width="22" height="22" fill="{% if 5 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="209" y="193" width="22" height="22" fill="{% if 6 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="233" y="193" width="22" height="22" fill="{% if 7 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="257" y="193" width="22" height="22" fill="{% if 8 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<rect x="281" y="193" width="22" height="22" fill="{% if 9 < ram_usage / 10 %}white{% else %}none{% endif %}"/>
+<path d="M256 216V192M256 216H232M256 216H280M256 192H232M256 192H280M208 192V216M208 192H184M208 192H232M160 192V216M160 192H136M160 192H184M208 216H184M208 216H232M160 216H136M160 216H184M112 216V192M112 216H88M112 216H136M112 192H88M112 192H136M88 192H64V216H88M88 192V216M136 192V216M184 192V216M232 192V216M280 192H304V216H280M280 192V216" stroke="white"/>
+</g>
+<defs>
+<clipPath id="clip0_54_45">
+<rect width="320" height="240" fill="white"/>
+</clipPath>
+</defs>
+</svg>

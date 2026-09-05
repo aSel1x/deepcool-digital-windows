@@ -1,15 +1,56 @@
 [package]
-name = "deepcool-digital-linux"
+name = "deepcool-digital"
 version = "0.10.4"
 edition = "2021"
+description = "Cross-platform userspace driver for DeepCool devices with digital displays"
+repository = "https://github.com/aSel1x/deepcool-digital-windows"
+license = "GPL-3.0-only"
 
 [dependencies]
-libloading = "0.9.0"
-hidapi = "2.6.4"
-cpu-monitor = "0.1.1"
 colored = "3.1.1"
+toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+resvg = "0.47"
+crc-any = "2.5.0"
+minijinja = { version = "2.19.0", default-features = false, features = ["loader", "builtins", "serde"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp"] }
+gif = "0.14.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cpu-monitor = "0.1.1"
+hidapi = { version = "2.6.5", default-features = false, features = ["linux-static-hidraw"] }
+libloading = "0.9.0"
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+ureq = { version = "3.3.0", default-features = false, features = ["json"] }
+base64 = "0.22"
+hidapi = { version = "2.6.5", default-features = false, features = ["windows-native"], optional = true }
+windows = { version = "0.62", default-features = false, features = [
+        "Win32_Foundation",
+        "Win32_Security",
+        "Win32_Graphics_Dxgi",
+        "Win32_System_IO",
+        "Win32_System_Console",
+        "Win32_System_Threading",
+        "Win32_System_SystemInformation",
+        "Win32_Devices_Usb",
+        "Win32_Devices_DeviceAndDriverInstallation",
+        "Win32_Storage_FileSystem",
+    ] }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[features]
+# Fall back to the HID backend on Windows when a device has no WinUSB interface.
+windows-hid-fallback = ["dep:hidapi"]
 
 [profile.release]
-opt-level = 3
+# opt-level 2: "z" costs ~2x on the per-frame SVG rasterisation hot path for a
+# few hundred KB of binary size that nothing here is constrained by.
+opt-level = 2
 lto = true
 strip = "symbols"
+codegen-units = 1
+panic = "abort"

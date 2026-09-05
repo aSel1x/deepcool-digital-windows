@@ -1,3 +1,34 @@
+# LD Series Display Specification
+
+LED Digital Display, Fixed segments, Template/segment display
+
+## Implementation Profile
+
+<table>
+    <tr>
+        <th>Series</th>
+        <th>VID</th>
+        <th>PID</th>
+        <th>Transport</th>
+        <th>Interface / Endpoint</th>
+        <th>Render Model</th>
+        <th>Packet Model</th>
+        <th>src/devices</th>
+        <th>Status</th>
+    </tr>
+    <tr>
+        <td>LD240 / LD360</td>
+        <td>0x3633</td>
+        <td>0x000A (10)</td>
+        <td>USB HID</td>
+        <td>IF 0, EP OUT 0x01 (64-byte writes)</td>
+        <td>Template/segment</td>
+        <td>Binary packet protocol (report prefix 0x10, fixed header, checksum, terminator 0x16)</td>
+        <td><a href="../../src/devices/ld_series.rs">src/devices/ld_series.rs</a></td>
+        <td>Implemented mapping path exists</td>
+    </tr>
+</table>
+
 # LD Series Mapping Table
 
 ### Initialization

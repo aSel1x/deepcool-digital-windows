@@ -1,4 +1,17 @@
+# Build
 debug/
 target/
 **/*.rs.bk
 *.pdb
+
+# Local runtime config (never commit — may contain LHM credentials)
+config.toml
+*.local.toml
+
+# Local machine dumps / generated reports
+data.json
+deepcool-teardown.html
+
+# Editor
+.vscode/
+.idea/

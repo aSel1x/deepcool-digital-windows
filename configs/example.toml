@@ -1,0 +1,47 @@
+# DeepCool Digital Configuration
+#
+# Search order (first match wins):
+#   --config <path>
+#   $DEEPCOOL_CONFIG
+#   ./config.toml
+#   $XDG_CONFIG_HOME/deepcool-digital/config.toml  (Linux)
+#   %APPDATA%\deepcool-digital\config.toml         (Windows)
+#   /etc/deepcool-digital/config.toml              (Linux)
+#   next to the executable
+#
+# Relative paths below resolve against the directory holding this file.
+# Unknown keys are a hard error, so a typo cannot be silently ignored.
+
+# ── Global ──────────────────────────────────────────────────────────────
+update_interval_ms = 1000        # 100-2000, clamped
+debug = false
+
+# ── Device selection (only needed with several DeepCool devices) ────────
+# [device]
+# product_id = 38
+# vendor_id = 13875
+# gpu = "nvidia:0"              # Linux: PCI address or vendor:index; unset = auto
+
+# ── LCD devices (LM-series) ─────────────────────────────────────────────
+[lcd]
+brightness = 100                 # 0-100
+rotation = 0                     # 0, 90, 180, 270 (applied by the device)
+source = "svg-templates/lm360-dashboard.svg"
+# fit = "stretch"                # stretch | contain | cover — raster sources only
+# font_dir = "assets"            # extra .ttf/.otf faces for SVG templates
+
+# ── Segment devices (AK, AG, LS, LD, LQ, LP, CH, CH510) ─────────────────
+[segment]
+# mode = "auto"                  # omit to use the device's own default; see configs/README.md
+# secondary = "gpu_temp"         # dual-display devices only (CH, LP)
+fahrenheit = false               # ignored on devices with no Fahrenheit unit code
+alarm = false                    # ignored on devices with no alarm byte
+rotation = 0                     # LP-series dot matrix only
+
+# ── Windows only — LibreHardwareMonitor ─────────────────────────────────
+[lhm]
+url = "http://127.0.0.1:8085/data.json"
+timeout_ms = 2000
+# auth_bearer = "your-token"
+# auth_basic_user = "user"
+# auth_basic_pass = "pass"

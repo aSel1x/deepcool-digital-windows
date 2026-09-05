@@ -1,0 +1,16 @@
+<svg viewBox="0 0 10 5" xmlns="http://www.w3.org/2000/svg">
+    <!-- Head -->
+    <path d="M4.5 1.5L4 1L4.5 0.5L5 0L5.5 0.5L6 1L5.5 1.5H4.5Z" fill="black"/>
+    <!-- Antenna -->
+    <path d="M5.5 0.5L6 1L5.5 1.5H4.5L4 1L4.5 0.5M5.5 0.5L5 0L4.5 0.5M5.5 0.5L6 0M4.5 0.5L4 0" stroke="black" stroke-width="0.1"/>
+    <!-- Body -->
+    <path d="M6 2H4L4.5 2.5V4.5L5 5L5.5 4.5V2.5L6 2Z" fill="black"/>
+    <!-- Right Up Wing -->
+    <path d="M7.5 0L5.5 2H8L10 0H7.5Z" fill="black"/>
+    <!-- Right Down Wing -->
+    <path d="M8 2.5L7.5 2H5.5L7 3.5H8V2.5Z" fill="black"/>
+    <!-- Left Up Wing -->
+    <path d="M2.5 0L4.5 2H2L0 0H2.5Z" fill="black"/>
+    <!-- Left Down Wing -->
+    <path d="M2 2.5L2.5 2H4.5L3 3.5H2V2.5Z" fill="black"/>
+</svg>

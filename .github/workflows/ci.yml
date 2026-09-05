@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Format ────────────────────────────────────────────────────────────
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --check
+
+  # ── Linux ─────────────────────────────────────────────────────────────
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libhidapi-dev
+
+      - uses: Swatinem/rust-cache@v2
+
+      # --all-targets so tests and examples are linted too, not just the binary.
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      # Release: the CRC brute-force test scans the full parameter space and
+      # takes ~60s unoptimised.
+      - name: Test
+        run: cargo test --release
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          mkdir -p dist/configs
+          cp target/release/deepcool-digital dist/
+          cp -r configs/svg-templates configs/assets dist/configs/
+          cp configs/example.toml dist/config.toml
+          cp README.md LICENSE dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepcool-digital-linux
+          path: dist/
+
+  # ── Windows ───────────────────────────────────────────────────────────
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        features: ["", "windows-hid-fallback"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --all-targets ${{ matrix.features && format('--features {0}', matrix.features) || '' }} -- -D warnings
+
+      - name: Test
+        run: cargo test --release ${{ matrix.features && format('--features {0}', matrix.features) || '' }}
+
+      - name: Build
+        if: matrix.features == ''
+        run: cargo build --release
+
+      - name: Package
+        if: matrix.features == ''
+        shell: bash
+        run: |
+          mkdir -p dist/configs
+          cp target/release/deepcool-digital.exe dist/
+          cp -r configs/svg-templates configs/assets dist/configs/
+          cp configs/example.toml dist/config.toml
+          cp README.md LICENSE dist/
+
+      - name: Upload artifact
+        if: matrix.features == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepcool-digital-windows
+          path: dist/

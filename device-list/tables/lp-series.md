@@ -1,3 +1,53 @@
+# LP Series Display Specification
+
+<table>
+    <tr>
+        <th>Model</th>
+        <th>Display Type</th>
+        <th>Display Area / Payload</th>
+        <th>Notes</th>
+    </tr>
+    <tr>
+        <td>LP240</td>
+        <td>LED Digital Display</td>
+        <td>14x14 matrix payload</td>
+        <td>Template/segment display</td>
+    </tr>
+    <tr>
+        <td>LP360</td>
+        <td>LED Digital Display</td>
+        <td>14x14 matrix payload</td>
+        <td>Template/segment display</td>
+    </tr>
+</table>
+
+## Implementation Profile
+
+<table>
+    <tr>
+        <th>Series</th>
+        <th>VID</th>
+        <th>PID</th>
+        <th>Transport</th>
+        <th>Interface / Endpoint</th>
+        <th>Render Model</th>
+        <th>Packet Model</th>
+        <th>src/devices</th>
+        <th>Status</th>
+    </tr>
+    <tr>
+        <td>LP240 / LP360</td>
+        <td>0x3633</td>
+        <td>0x000C (12)</td>
+        <td>USB HID</td>
+        <td>IF 0, EP OUT 0x01 (64-byte writes)</td>
+        <td>Template/segment</td>
+        <td>14x14 dot-matrix payload packetized in fixed report format</td>
+        <td><a href="../../src/devices/lp_series.rs">src/devices/lp_series.rs</a></td>
+        <td>Implemented mapping path exists</td>
+    </tr>
+</table>
+
 # LP Series Mapping Table
 <table>
     <tr>

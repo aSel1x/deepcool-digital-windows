@@ -1,5 +1,8 @@
 # Device List
 
+Per-device byte mappings are linked in the table below. The authoritative list of
+supported product ids lives in `src/devices/mod.rs` (`DEVICES`).
+
 <table>
     <tr>
         <th>VID</th>
@@ -215,4 +218,4 @@
     </tr>
 </table>
 
-*Devices marked as "Not tested" might have incorrect PIDs or mapping tables.*
+*Devices marked as "Not tested" might have incorrect PIDs or mapping tables.*

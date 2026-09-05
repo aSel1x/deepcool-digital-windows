@@ -2,132 +2,125 @@
 //! - LS520 SE DIGITAL
 //! - LS720 SE DIGITAL
 
-use crate::monitor::cpu::Cpu;
-use super::{device_error, Mode, AUTO_MODE_INTERVAL};
-use hidapi::HidApi;
-use std::{thread::sleep, time::{Duration, Instant}};
+use super::{bar_level, digits3, Ctx, DisplayDriver, Mode};
+use crate::device::Device;
+use crate::error::Result;
+use crate::monitor::{Cpu, EnergySample};
 
-pub const DEFAULT_MODE: Mode = Mode::CpuTemperature;
 pub const TEMP_LIMIT_C: u8 = 90;
 pub const TEMP_LIMIT_F: u8 = 194;
 
+const MODES: &[Mode] = &[Mode::CpuTemperature, Mode::CpuPower, Mode::Auto];
+
 pub struct Display {
     cpu: Cpu,
-    pub mode: Mode,
-    update: Duration,
     fahrenheit: bool,
     alarm: bool,
+    /// Energy counter sampled at the end of the previous frame.
+    ///
+    /// Power is now averaged over the measured gap between two samples instead
+    /// of over the nominal update interval — the old code passed `update` while
+    /// the real window also contained `get_usage`'s 100 ms sleep, over-reporting
+    /// power by 10% at the 1 s default and 2x at the 100 ms minimum.
+    last_energy: Option<EnergySample>,
+}
+
+pub fn build(ctx: Ctx) -> Result<Box<dyn DisplayDriver>> {
+    Ok(Box::new(Display {
+        cpu: ctx.cpu,
+        fahrenheit: ctx.fahrenheit,
+        alarm: ctx.alarm,
+        last_energy: None,
+    }))
+}
+
+impl DisplayDriver for Display {
+    fn modes(&self) -> &'static [Mode] {
+        MODES
+    }
+
+    fn warn(&self, mode: Mode) {
+        self.cpu.warn_temp();
+        if matches!(mode, Mode::CpuPower | Mode::Auto) {
+            self.cpu.warn_rapl();
+        }
+    }
+
+    fn init(&mut self, device: &mut dyn Device) -> Result<()> {
+        let mut init_data = [0u8; 64];
+        init_data[0] = 16;
+        init_data[1] = 170;
+        self.last_energy = self.cpu.read_energy();
+        device.write_report(&init_data)
+    }
+
+    fn frame(&mut self, device: &mut dyn Device, mode: Mode) -> Result<()> {
+        let packet = self.status_message(mode);
+        self.last_energy = self.cpu.read_energy();
+        device.write_report(&packet)
+    }
 }
 
 impl Display {
-    pub fn new(cpu: Cpu, mode: &Mode, update: Duration, fahrenheit: bool, alarm: bool) -> Self {
-        // Verify the display mode
-        let mode = match mode {
-            Mode::Default => DEFAULT_MODE,
-            Mode::Auto => Mode::Auto,
-            Mode::CpuTemperature => Mode::CpuTemperature,
-            Mode::CpuPower => Mode::CpuPower,
-            _ => mode.support_error(),
-        };
-
-        Display {
-            cpu,
-            mode,
-            update,
-            fahrenheit,
-            alarm,
-        }
-    }
-
-    pub fn run(&self, api: &HidApi, vid: u16, pid: u16) {
-        // Connect to device
-        let device = api.open(vid, pid).unwrap_or_else(|_| device_error());
-
-        // Display warning if a required module is missing
-        self.cpu.warn_temp();
-        self.cpu.warn_rapl();
-
-        // Data packet
-        let mut data: [u8; 64] = [0; 64];
+    fn status_message(&self, mode: Mode) -> [u8; 64] {
+        let mut data = [0u8; 64];
         data[0] = 16;
 
-        // Init sequence
-        {
-            let mut init_data = data.clone();
-            init_data[1] = 170;
-            device.write(&init_data).unwrap();
-        }
+        let usage = self.cpu.get_usage().unwrap_or(0);
+        let temp = self.cpu.get_temp(self.fahrenheit).unwrap_or(0);
 
-        // Display loop
-        match self.mode {
-            Mode::Auto => {
-                let mut initial_update = self.update;
-                let mut mode = Mode::CpuTemperature;
-                loop {
-                    // Initial update
-                    device.write(&self.status_message(&data, &mode, initial_update)).unwrap();
-
-                    // Update until timeout
-                    let timeout = Instant::now() + AUTO_MODE_INTERVAL;
-                    while Instant::now() + self.update < timeout {
-                        device.write(&self.status_message(&data, &mode, self.update)).unwrap();
-                    }
-
-                    // Make the next initial update faster to fit the timeframe
-                    initial_update = timeout - Instant::now();
-
-                    // Switch to the next display mode
-                    mode = match mode {
-                        Mode::CpuTemperature => Mode::CpuPower,
-                        Mode::CpuPower => Mode::CpuTemperature,
-                        _ => DEFAULT_MODE,
-                    }
-                }
-            }
-            _ => loop {
-                device.write(&self.status_message(&data, &self.mode, self.update)).unwrap();
-            }
-        }
-    }
-
-    /// Reads the CPU status information and returns the data packet.
-    fn status_message(&self, inital_data: &[u8; 64], mode: &Mode, update: Duration) -> [u8; 64] {
-        // Clone the data packet
-        let mut data = inital_data.clone();
-
-        // Read CPU utilization & energy consumption (if needed)
-        let cpu_instant = self.cpu.read_instant();
-        let cpu_energy = if mode == &Mode::CpuPower { self.cpu.read_energy() } else { 0 };
-
-        // Wait
-        sleep(update);
-
-        // Calculate usage & temperature
-        let usage = self.cpu.get_usage(cpu_instant);
-        let temp = self.cpu.get_temp(self.fahrenheit);
-
-        // Main display
         match mode {
             Mode::CpuTemperature => {
                 data[1] = if self.fahrenheit { 35 } else { 19 };
-                data[3] = temp / 100;
-                data[4] = temp % 100 / 10;
-                data[5] = temp % 10;
+                let d = digits3(temp as u16);
+                data[3] = d[0];
+                data[4] = d[1];
+                data[5] = d[2];
             }
             Mode::CpuPower => {
-                let power = self.cpu.get_power(cpu_energy, update.as_millis() as u64);
+                let power = self.cpu.get_power(self.last_energy).unwrap_or(0);
                 data[1] = 76;
-                data[3] = (power / 100) as u8;
-                data[4] = (power % 100 / 10) as u8;
-                data[5] = (power % 10) as u8;
+                let d = digits3(power);
+                data[3] = d[0];
+                data[4] = d[1];
+                data[5] = d[2];
             }
             _ => (),
         }
-        // Status bar
-        data[2] = if usage < 15 { 1 } else { (usage as f32 / 10.0).round() as u8 };
-        // Alarm
+        data[2] = bar_level(usage);
         data[6] = (self.alarm && temp >= if self.fahrenheit { TEMP_LIMIT_F } else { TEMP_LIMIT_C }) as u8;
 
         data
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn power_above_999_watts_clamps_instead_of_wrapping() {
+        // digits3 is what guards this; assert the contract the packet relies on.
+        assert_eq!(super::digits3(1200), [9, 9, 9]);
+    }
+
+    #[test]
+    fn unit_codes_match_the_protocol_table() {
+        let d = Display {
+            cpu: Cpu::new(),
+            fahrenheit: false,
+            alarm: false,
+            last_energy: None,
+        };
+        assert_eq!(d.status_message(Mode::CpuTemperature)[1], 19);
+        assert_eq!(d.status_message(Mode::CpuPower)[1], 76);
+
+        let f = Display {
+            cpu: Cpu::new(),
+            fahrenheit: true,
+            alarm: false,
+            last_energy: None,
+        };
+        assert_eq!(f.status_message(Mode::CpuTemperature)[1], 35);
     }
 }

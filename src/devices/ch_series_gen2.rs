@@ -3,66 +3,79 @@
 //! - CH270 DIGITAL
 //! - CH690 DIGITAL
 
-use crate::{monitor::{cpu::Cpu, gpu::Gpu}, warning};
-use super::{device_error, Mode, AUTO_MODE_INTERVAL};
-use hidapi::HidApi;
-use std::{thread::sleep, time::{Duration, Instant}};
+use super::{checksum, Ctx, DisplayDriver, Mode};
+use crate::device::Device;
+use crate::error::Result;
+use crate::monitor::{Cpu, EnergySample, Gpu};
+use crate::warning;
 
-pub const DEFAULT_MODE: Mode = Mode::CpuFrequency;
+// cpu_fan and psu set their protocol selector byte but carry no data yet. They
+// stay accepted — rejecting them would turn a previously working config into a
+// startup failure — and warn instead. Auto only cycles the implemented ones.
+const MODES: &[Mode] = &[Mode::CpuFrequency, Mode::Gpu, Mode::Auto, Mode::CpuFan, Mode::Psu];
+const AUTO_CYCLE: &[Mode] = &[Mode::CpuFrequency, Mode::Gpu];
+
+#[cfg(test)]
+pub(super) const MODES_FOR_TEST: &[Mode] = MODES;
+#[cfg(test)]
+pub(super) const AUTO_CYCLE_FOR_TEST: &[Mode] = AUTO_CYCLE;
 
 pub struct Display {
     cpu: Cpu,
     gpu: Gpu,
-    pub mode: Mode,
-    update: Duration,
     fahrenheit: bool,
+    last_energy: Option<EnergySample>,
 }
 
-impl Display {
-    pub fn new(cpu: Cpu, gpu: Gpu, mode: &Mode, update: Duration, fahrenheit: bool) -> Self {
-        // Verify the display mode
-        let mode = match mode {
-            Mode::Default => DEFAULT_MODE,
-            Mode::Auto => Mode::Auto,
-            Mode::CpuFrequency => Mode::CpuFrequency,
-            Mode::CpuFan => Mode::CpuFan,
-            Mode::Gpu => Mode::Gpu,
-            Mode::Psu => Mode::Psu,
-            _ => mode.support_error(),
-        };
+pub fn build(ctx: Ctx) -> Result<Box<dyn DisplayDriver>> {
+    Ok(Box::new(Display {
+        cpu: ctx.cpu,
+        gpu: ctx.gpu,
+        fahrenheit: ctx.fahrenheit,
+        last_energy: None,
+    }))
+}
 
-        Display {
-            cpu,
-            gpu,
-            mode,
-            update,
-            fahrenheit,
-        }
+impl DisplayDriver for Display {
+    fn modes(&self) -> &'static [Mode] {
+        MODES
     }
 
-    pub fn run(&self, api: &HidApi, vid: u16, pid: u16) {
-        // Connect to device
-        let device = api.open(vid, pid).unwrap_or_else(|_| device_error());
+    fn auto_cycle(&self) -> &'static [Mode] {
+        AUTO_CYCLE
+    }
 
-        // Display warning to address limitated display modes
-        match self.mode {
-            Mode::CpuFan => { warning!("CPU fan speed monitoring is not yet supported"); }
-            Mode::Psu => { warning!("PSU monitoring is not yet supported"); }
-            Mode::Auto => { warning!("Display mode \"auto\" only cycles between fully supported modes"); }
+    fn warn(&self, mode: Mode) {
+        match mode {
+            Mode::CpuFan => warning!("CPU fan speed monitoring is not yet supported"),
+            Mode::Psu => warning!("PSU monitoring is not yet supported"),
+            Mode::Auto => warning!("Display mode \"auto\" only cycles between fully supported modes"),
             _ => (),
         }
-
-        // Display warning if a required module is missing
-        if matches!(self.mode, Mode::CpuFrequency | Mode::CpuFan | Mode::Auto) {
+        if matches!(mode, Mode::CpuFrequency | Mode::CpuFan | Mode::Auto) {
             self.cpu.warn_temp();
             self.cpu.warn_rapl();
         }
-        if matches!(self.mode, Mode::Gpu | Mode::Auto) {
+        if matches!(mode, Mode::Gpu | Mode::Auto) {
             self.gpu.warn_missing();
         }
+    }
 
-        // Data packet
-        let mut data: [u8; 64] = [0; 64];
+    fn init(&mut self, _device: &mut dyn Device) -> Result<()> {
+        self.last_energy = self.cpu.read_energy();
+        Ok(())
+    }
+
+    fn frame(&mut self, device: &mut dyn Device, mode: Mode) -> Result<()> {
+        let packet = self.status_message(mode);
+        self.last_energy = self.cpu.read_energy();
+        device.write_report(&packet)
+    }
+}
+
+impl Display {
+    fn status_message(&self, mode: Mode) -> [u8; 64] {
+        let mut data = [0u8; 64];
         data[0] = 16;
         data[1] = 104;
         data[2] = 1;
@@ -71,44 +84,6 @@ impl Display {
         data[5] = 1;
         data[9] = if self.fahrenheit { 1 } else { 0 };
 
-        // Display loop
-        match self.mode {
-            Mode::Auto => {
-                let mut initial_update = self.update;
-                let mut mode = Mode::CpuFrequency;
-                loop {
-                    // Initial update
-                    device.write(&self.status_message(&data, &mode, initial_update)).unwrap();
-
-                    // Update until timeout
-                    let timeout = Instant::now() + AUTO_MODE_INTERVAL;
-                    while Instant::now() + self.update < timeout {
-                        device.write(&self.status_message(&data, &mode, self.update)).unwrap();
-                    }
-
-                    // Make the next initial update faster to fit the timeframe
-                    initial_update = timeout - Instant::now();
-
-                    // Switch to the next display mode
-                    mode = match mode {
-                        Mode::CpuFrequency => Mode::Gpu,
-                        Mode::Gpu => Mode::CpuFrequency,
-                        _ => DEFAULT_MODE,
-                    }
-                }
-            }
-            _ => loop {
-                device.write(&self.status_message(&data, &self.mode, self.update)).unwrap();
-            }
-        }
-    }
-
-    /// Reads the system status information and returns the data packet.
-    fn status_message(&self, inital_data: &[u8; 64], mode: &Mode, update: Duration) -> [u8; 64] {
-        // Clone the data packet
-        let mut data = inital_data.clone();
-
-        // Set the display mode
         data[6] = match mode {
             Mode::CpuFrequency => 2,
             Mode::CpuFan => 3,
@@ -117,74 +92,87 @@ impl Display {
             _ => 0,
         };
 
-        // Main display
         match mode {
             Mode::CpuFrequency | Mode::CpuFan => {
-                // Read CPU utilization & energy consumption
-                let cpu_instant = self.cpu.read_instant();
-                let cpu_energy = self.cpu.read_energy();
-
-                // Wait
-                sleep(update);
-
-                // Power consumption
-                let power = (self.cpu.get_power(cpu_energy, update.as_millis() as u64)).to_be_bytes();
+                let power = self.cpu.get_power(self.last_energy).unwrap_or(0).to_be_bytes();
                 data[7] = power[0];
                 data[8] = power[1];
 
-                // Temperature
-                let temp = (self.cpu.get_temp(self.fahrenheit) as f32).to_be_bytes();
+                let temp = (self.cpu.get_temp(self.fahrenheit).unwrap_or(0) as f32).to_be_bytes();
                 data[10] = temp[0];
                 data[11] = temp[1];
                 data[12] = temp[2];
                 data[13] = temp[3];
 
-                // Utilization
-                data[14] = self.cpu.get_usage(cpu_instant);
+                data[14] = self.cpu.get_usage().unwrap_or(0);
 
-                // Frequency
-                if matches!(mode, Mode::CpuFrequency) {
-                    let frequency = (self.cpu.get_frequency()).to_be_bytes();
+                if mode == Mode::CpuFrequency {
+                    let frequency = self.cpu.get_frequency().unwrap_or(0).to_be_bytes();
                     data[15] = frequency[0];
                     data[16] = frequency[1];
                 }
             }
             Mode::Gpu => {
-                // Wait
-                sleep(update);
-
-                // Power consumption
-                let power = (self.gpu.get_power()).to_be_bytes();
+                let power = self.gpu.get_power().unwrap_or(0).to_be_bytes();
                 data[19] = power[0];
                 data[20] = power[1];
 
-                // Temperature
-                let temp = (self.gpu.get_temp(self.fahrenheit) as f32).to_be_bytes();
+                let temp = (self.gpu.get_temp(self.fahrenheit).unwrap_or(0) as f32).to_be_bytes();
                 data[21] = temp[0];
                 data[22] = temp[1];
                 data[23] = temp[2];
                 data[24] = temp[3];
 
-                // Utilization
-                data[25] = self.gpu.get_usage();
+                data[25] = self.gpu.get_usage().unwrap_or(0);
 
-                // Frequency
-                let frequency = (self.gpu.get_frequency()).to_be_bytes();
+                let frequency = self.gpu.get_frequency().unwrap_or(0).to_be_bytes();
                 data[26] = frequency[0];
                 data[27] = frequency[1];
-            }
-            Mode::Psu => {
-                // Wait
-                sleep(update);
             }
             _ => (),
         }
 
-        // Checksum & termination byte
-        let checksum: u16 = data[1..=39].iter().map(|&x| x as u16).sum();
-        data[40] = (checksum % 256) as u8;
+        data[40] = checksum(&data, 39);
         data[41] = 22;
 
         data
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn display() -> Display {
+        Display {
+            cpu: Cpu::new(),
+            gpu: Gpu::absent(),
+            fahrenheit: false,
+            last_energy: None,
+        }
+    }
+
+    #[test]
+    fn mode_selector_byte_matches_the_protocol_table() {
+        assert_eq!(display().status_message(Mode::CpuFrequency)[6], 2);
+        assert_eq!(display().status_message(Mode::Gpu)[6], 4);
+    }
+
+    #[test]
+    fn checksum_covers_bytes_one_through_thirtynine() {
+        let pkt = display().status_message(Mode::CpuFrequency);
+        let manual = (pkt[1..=39].iter().map(|&b| b as u16).sum::<u16>() % 256) as u8;
+        assert_eq!(pkt[40], manual);
+        assert_eq!(pkt[41], 22);
+    }
+
+    #[test]
+    fn not_yet_implemented_modes_are_accepted_but_never_auto_cycled() {
+        let d = display();
+        // Accepted: rejecting them would break configs that worked before.
+        assert!(d.modes().contains(&Mode::CpuFan));
+        assert!(d.modes().contains(&Mode::Psu));
+        // But `auto` only rotates through the modes that actually draw data.
+        assert_eq!(d.auto_cycle(), &[Mode::CpuFrequency, Mode::Gpu]);
     }
 }

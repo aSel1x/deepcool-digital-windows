@@ -1,0 +1,13 @@
+{
+    "name": "Rust Dev Environment",
+    "image": "mcr.microsoft.com/devcontainers/rust", 
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer"
+            ]
+        }
+    },
+    "remoteUser": "vscode",
+    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config"
+}

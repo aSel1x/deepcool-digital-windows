@@ -2,99 +2,111 @@
 //! - LD240
 //! - LD360
 
-use crate:: monitor::cpu::Cpu;
-use super::{device_error, Mode};
-use hidapi::HidApi;
-use std::{thread::sleep, time::Duration};
+use super::{checksum, Ctx, DisplayDriver, Mode};
+use crate::device::Device;
+use crate::error::Result;
+use crate::monitor::{Cpu, EnergySample};
 
-pub const DEFAULT_MODE: Mode = Mode::Auto;
-// The temperature limits are hard-coded in the device
-pub const TEMP_LIMIT_C: u8 = 85;
-pub const TEMP_LIMIT_F: u8 = 185;
+const MODES: &[Mode] = &[Mode::Auto];
 
 pub struct Display {
     cpu: Cpu,
-    update: Duration,
     fahrenheit: bool,
+    last_energy: Option<EnergySample>,
+}
+
+pub fn build(ctx: Ctx) -> Result<Box<dyn DisplayDriver>> {
+    Ok(Box::new(Display {
+        cpu: ctx.cpu,
+        fahrenheit: ctx.fahrenheit,
+        last_energy: None,
+    }))
+}
+
+impl DisplayDriver for Display {
+    fn modes(&self) -> &'static [Mode] {
+        MODES
+    }
+
+    fn warn(&self, _mode: Mode) {
+        self.cpu.warn_temp();
+        self.cpu.warn_rapl();
+    }
+
+    fn init(&mut self, device: &mut dyn Device) -> Result<()> {
+        let mut init_data = [0u8; 64];
+        init_data[0] = 16;
+        init_data[1] = 104;
+        init_data[2] = 1;
+        init_data[3] = 1;
+        init_data[4] = 2;
+        init_data[5] = 3;
+        init_data[6] = 1;
+        init_data[7] = 112;
+        init_data[8] = 22;
+        device.write_report(&init_data)?;
+
+        init_data[5] = 2;
+        init_data[7] = 111;
+        device.write_report(&init_data)?;
+
+        self.last_energy = self.cpu.read_energy();
+        Ok(())
+    }
+
+    fn frame(&mut self, device: &mut dyn Device, _mode: Mode) -> Result<()> {
+        let packet = self.status_message();
+        self.last_energy = self.cpu.read_energy();
+        device.write_report(&packet)
+    }
 }
 
 impl Display {
-    pub fn new(cpu: Cpu, update: Duration, fahrenheit: bool) -> Self {
-        Display {
-            cpu,
-            update,
-            fahrenheit,
-        }
-    }
-
-    pub fn run(&self, api: &HidApi, vid: u16, pid: u16) {
-        // Connect to device
-        let device = api.open(vid, pid).unwrap_or_else(|_| device_error());
-
-        // Display warning if a required module is missing
-        self.cpu.warn_temp();
-        self.cpu.warn_rapl();
-
-        // Data packet
-        let mut data: [u8; 64] = [0; 64];
+    fn status_message(&self) -> [u8; 64] {
+        let mut data = [0u8; 64];
         data[0] = 16;
         data[1] = 104;
         data[2] = 1;
         data[3] = 1;
-
-        // Init sequence
-        {
-            let mut init_data = data.clone();
-            init_data[4] = 2;
-            init_data[5] = 3;
-            init_data[6] = 1;
-            init_data[7] = 112;
-            init_data[8] = 22;
-            device.write(&init_data).unwrap();
-            init_data[5] = 2;
-            init_data[7] = 111;
-            device.write(&init_data).unwrap();
-        }
-
-        // Display loop
         data[4] = 11;
         data[5] = 1;
         data[6] = 2;
         data[7] = 5;
-        loop {
-            // Initialize the packet
-            let mut status_data = data.clone();
 
-            // Read CPU utilization & energy consumption
-            let cpu_instant = self.cpu.read_instant();
-            let cpu_energy = self.cpu.read_energy();
+        let power = self.cpu.get_power(self.last_energy).unwrap_or(0).to_be_bytes();
+        data[8] = power[0];
+        data[9] = power[1];
 
-            // Wait
-            sleep(self.update);
+        let temp = (self.cpu.get_temp(self.fahrenheit).unwrap_or(0) as f32).to_be_bytes();
+        data[10] = if self.fahrenheit { 1 } else { 0 };
+        data[11] = temp[0];
+        data[12] = temp[1];
+        data[13] = temp[2];
+        data[14] = temp[3];
 
-            // ----- Write data to the package -----
-            // Power consumption
-            let power = (self.cpu.get_power(cpu_energy, self.update.as_millis() as u64)).to_be_bytes();
-            status_data[8] = power[0];
-            status_data[9] = power[1];
+        data[15] = self.cpu.get_usage().unwrap_or(0);
 
-            // Temperature
-            let temp = (self.cpu.get_temp(self.fahrenheit) as f32).to_be_bytes();
-            status_data[10] = if self.fahrenheit { 1 } else { 0 };
-            status_data[11] = temp[0];
-            status_data[12] = temp[1];
-            status_data[13] = temp[2];
-            status_data[14] = temp[3];
+        data[16] = checksum(&data, 15);
+        data[17] = 22;
 
-            // Utilization
-            status_data[15] = self.cpu.get_usage(cpu_instant);
+        data
+    }
+}
 
-            // Checksum & termination byte
-            let checksum: u16 = status_data[1..=15].iter().map(|&x| x as u16).sum();
-            status_data[16] = (checksum % 256) as u8;
-            status_data[17] = 22;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-            device.write(&status_data).unwrap();
-        }
+    #[test]
+    fn packet_header_and_terminator_match_the_protocol_table() {
+        let d = Display {
+            cpu: Cpu::new(),
+            fahrenheit: false,
+            last_energy: None,
+        };
+        let pkt = d.status_message();
+        assert_eq!([pkt[0], pkt[1], pkt[2], pkt[3], pkt[4]], [16, 104, 1, 1, 11]);
+        assert_eq!(pkt[16], checksum(&pkt, 15));
+        assert_eq!(pkt[17], 22);
     }
 }

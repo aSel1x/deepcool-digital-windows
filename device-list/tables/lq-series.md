@@ -1,3 +1,59 @@
+# LQ Series Display Specification
+
+<table>
+    <tr>
+        <th>Model</th>
+        <th>Display Type</th>
+        <th>Display Area</th>
+        <th>Notes</th>
+    </tr>
+    <tr>
+        <td>LQ240</td>
+        <td>LED Digital Display</td>
+        <td>53.9x49.15 mm</td>
+        <td>Template/segment display</td>
+    </tr>
+    <tr>
+        <td>LQ360</td>
+        <td>LED Digital Display</td>
+        <td>53.9x49.15 mm</td>
+        <td>Template/segment display</td>
+    </tr>
+    <tr>
+        <td>LQ360 ULTRA ARGB</td>
+        <td>LED Digital Display</td>
+        <td>53.9x49.15 mm</td>
+        <td>Template/segment display</td>
+    </tr>
+</table>
+
+## Implementation Profile
+
+<table>
+    <tr>
+        <th>Series</th>
+        <th>VID</th>
+        <th>PID</th>
+        <th>Transport</th>
+        <th>Interface / Endpoint</th>
+        <th>Render Model</th>
+        <th>Packet Model</th>
+        <th>src/devices</th>
+        <th>Status</th>
+    </tr>
+    <tr>
+        <td>LQ240 / LQ360 / LQ360 ULTRA</td>
+        <td>0x3633</td>
+        <td>0x000D (13)</td>
+        <td>USB HID</td>
+        <td>IF 0, EP OUT 0x01 (64-byte writes)</td>
+        <td>Template/segment</td>
+        <td>Binary packet protocol with fixed header and checksum byte at D17</td>
+        <td><a href="../../src/devices/lq_series.rs">src/devices/lq_series.rs</a></td>
+        <td>Implemented mapping path exists</td>
+    </tr>
+</table>
+
 # LQ Series / ASSASSIN IV / AK G2 Series / AK700 Mapping Table
 <table>
     <tr>
